@@ -45,8 +45,7 @@ export default function FilterForm({ value, onChange, onSubmit }: Props) {
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           value={value.city ?? ""}
           onChange={(e) => {
-            set("city", e.target.value || undefined);
-            set("district", undefined);
+            onChange({ ...value, city: e.target.value || undefined, district: undefined });
           }}
         >
           <option value="">不限縣市</option>
