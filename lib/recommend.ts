@@ -222,6 +222,8 @@ export async function generateRecommendation(
       };
     } catch (err) {
       // AI 呼叫或解析失敗時，退回規則式評分，確保功能仍可使用
+      // eslint-disable-next-line no-console
+      console.error("[recommend] Claude 呼叫或回應解析失敗，改用規則式評分：", err);
       const recommendations = buildRuleBasedRecommendations(areas, request, recordsByArea);
       return {
         summary:
