@@ -52,9 +52,16 @@ export async function callClaude(params: {
   }
 
   const data = await res.json();
-  const text = data?.content?.[0]?.text;
+  const blocks: { type?: string; text?: string }[] = Array.isArray(data?.content)
+    ? data.content
+    : [];
+  // 部分模型（例如具備 extended thinking 的模型）會在 text 區塊之前
+  // 回傳 thinking／redacted_thinking 等其他類型的區塊，因此不能假設
+  // content[0] 就是文字內容，需搜尋第一個 type === "text" 的區塊。
+  const text = blocks.find((block) => block?.type === "text")?.text;
   if (typeof text !== "string") {
-    throw new Error("Claude API 回應格式不符預期");
+    const blockTypes = blocks.map((b) => b?.type ?? "unknown").join(", ") || "(空陣列)";
+    throw new Error(`Claude API 回應格式不符預期，content 區塊類型：${blockTypes}`);
   }
   return text;
 }
