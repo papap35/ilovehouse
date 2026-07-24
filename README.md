@@ -58,6 +58,38 @@ CSV 成交資料並解析標準化；若佈署環境無法對外連線到 `plvr.
 或該縣市/季度查無資料，會自動退回內建的示範資料集，讓查詢、篩選、統計與 AI 規劃流程仍可完整運作。
 回應中的 `dataSource` 欄位（`gov_open_data` / `sample`）與畫面上的統計卡片會標示目前使用的資料來源。
 
+## CI/CD 與部署到 Vercel
+
+### CI（GitHub Actions）
+
+`.github/workflows/ci.yml` 會在每次 push 到 `main` 或對 `main` 開 PR 時自動執行：
+
+1. `npm ci` 安裝依賴
+2. `npm run lint`（ESLint）
+3. `npm test`（vitest 單元測試）
+4. `npm run build`（Next.js 正式建置，含型別檢查）
+
+建議在 GitHub repo 設定中將此 workflow 設為 `main` 分支的必要狀態檢查（Settings → Branches →
+Branch protection rules），確保沒有通過測試與建置的程式碼不會被合併。
+
+### CD（部署到 Vercel）
+
+本專案是標準的 Next.js App Router 專案，Vercel 可以零設定自動偵測建置方式，最簡單且官方推薦的方式是使用
+**Vercel 的 GitHub 整合**（不需要額外寫 GitHub Actions 部署腳本）：
+
+1. 到 [vercel.com](https://vercel.com/) 用你的 GitHub 帳號登入。
+2. 點選 **Add New → Project**，選擇 `papap35/ilovehouse` 這個 repository 並 Import。
+3. Framework Preset 會自動偵測為 **Next.js**，Build Command / Output Directory 保持預設即可。
+4. 在 **Environment Variables** 加入：
+   - `ANTHROPIC_API_KEY`：啟用 AI 選屋規劃功能所需（未設定時該功能會自動退回規則式評分，不會壞掉）。
+   - `ANTHROPIC_MODEL`（選填）：覆寫預設模型。
+5. 點 **Deploy**。之後每次 push 到 `main` 會自動觸發正式環境（Production）部署，每個 PR 會自動產生獨立的
+   Preview 部署網址，方便先預覽再合併。
+
+連接完成後，Vercel 的部署狀態與網址會自動顯示在對應的 GitHub PR／commit 上。若你希望改用 GitHub Actions
+搭配 Vercel CLI（例如需要更嚴格地「CI 全過才部署」的流程控制），可以另外提供 `VERCEL_TOKEN`、
+`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID` 這三個值，我可以再補一個 `.github/workflows/deploy.yml`。
+
 ## 免責聲明
 
 本站查詢結果與 AI 建議僅供參考，不構成買賣或租賃決策依據，實際交易請以現場看屋、產權調查與專業意見為準。
