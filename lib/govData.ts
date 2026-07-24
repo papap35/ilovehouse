@@ -249,6 +249,8 @@ async function fetchGovCsv(city: string, dealType: DealType): Promise<PropertyRe
 
 export interface GetPropertiesOptions {
   city?: string;
+  /** 一次查詢多個縣市（例如地圖畫圈範圍搜尋可能橫跨多個縣市），與 city 擇一使用即可 */
+  cities?: string[];
   dealType?: DealType;
 }
 
@@ -258,28 +260,47 @@ export interface GetPropertiesResult {
 }
 
 /**
- * 取得實價登錄資料。若有指定縣市，會嘗試即時向內政部開放資料下載並解析；
- * 若連線失敗、找不到資料，或未指定縣市（避免一次對 21 個縣市發送請求），
- * 則退回使用內建示範資料集，讓查詢與 AI 規劃流程在離線環境下仍可運作。
+ * 取得實價登錄資料。若有指定縣市（可一或多個），會嘗試即時向內政部開放資料
+ * 下載並解析每個縣市的資料；若某縣市連線失敗或查無資料，該縣市會退回使用
+ * 內建示範資料集（其餘縣市若成功仍使用即時資料），讓查詢與 AI 規劃流程在
+ * 離線環境下仍可運作。未指定任何縣市時（避免一次對 21 個縣市發送請求），
+ * 直接使用示範資料集。dataSource 只有在「所有」指定縣市都成功取得即時資料
+ * 時才會是 gov_open_data，否則視為 sample（表示結果中混有或全為示範資料）。
  */
 export async function getProperties(
   options: GetPropertiesOptions = {}
 ): Promise<GetPropertiesResult> {
-  const { city, dealType } = options;
+  const { city, cities, dealType } = options;
+  const requested = cities && cities.length > 0 ? cities : city ? [city] : [];
+  const targetCities = Array.from(new Set(requested.filter((c) => CITY_CODE[c])));
 
-  if (city && CITY_CODE[city]) {
+  if (targetCities.length > 0) {
     const dealTypes: DealType[] = dealType ? [dealType] : ["buy", "rent"];
-    const results = await Promise.all(
-      dealTypes.map((dt) => fetchGovCsv(city, dt))
+    const perCity = await Promise.all(
+      targetCities.map(async (c) => {
+        const results = await Promise.all(dealTypes.map((dt) => fetchGovCsv(c, dt)));
+        return { city: c, records: results.flat() };
+      })
     );
-    const combined = results.flat();
-    if (combined.length > 0) {
-      return { records: combined, dataSource: "gov_open_data" };
+
+    const combined: PropertyRecord[] = [];
+    let allLive = true;
+    for (const { city: c, records } of perCity) {
+      if (records.length > 0) {
+        combined.push(...records);
+      } else {
+        allLive = false;
+        const sampleForCity = getSampleData().filter(
+          (r) => r.city === c && (!dealType || r.dealType === dealType)
+        );
+        combined.push(...sampleForCity);
+      }
     }
+
+    return { records: combined, dataSource: allLive ? "gov_open_data" : "sample" };
   }
 
   const sample = getSampleData().filter((r) => {
-    if (city && r.city !== city) return false;
     if (dealType && r.dealType !== dealType) return false;
     return true;
   });
