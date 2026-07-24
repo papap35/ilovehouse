@@ -31,7 +31,7 @@ export async function callClaude(params: {
     },
     body: JSON.stringify({
       model,
-      max_tokens: params.maxTokens ?? 2000,
+      max_tokens: params.maxTokens ?? 4096,
       system: params.system,
       messages: [{ role: "user", content: params.userMessage }],
     }),
@@ -52,16 +52,40 @@ export async function callClaude(params: {
   }
 
   const data = await res.json();
-  const blocks: { type?: string; text?: string }[] = Array.isArray(data?.content)
-    ? data.content
-    : [];
+  return extractTextFromResponse(data);
+}
+
+interface AnthropicContentBlock {
+  type?: string;
+  text?: string;
+}
+
+interface AnthropicMessageResponse {
+  content?: AnthropicContentBlock[];
+  stop_reason?: string;
+}
+
+/**
+ * 從 Anthropic Messages API 的回應 JSON 中取出文字內容。
+ * 抽成不依賴網路呼叫的純函式，方便用固定的假回應寫單元測試，
+ * 不用每次改動都要重新部署、等真的呼叫 API 才能驗證解析邏輯是否正確。
+ */
+export function extractTextFromResponse(data: unknown): string {
+  const response = data as AnthropicMessageResponse;
+  const blocks = Array.isArray(response?.content) ? response.content : [];
   // 部分模型（例如具備 extended thinking 的模型）會在 text 區塊之前
   // 回傳 thinking／redacted_thinking 等其他類型的區塊，因此不能假設
   // content[0] 就是文字內容，需搜尋第一個 type === "text" 的區塊。
   const text = blocks.find((block) => block?.type === "text")?.text;
   if (typeof text !== "string") {
     const blockTypes = blocks.map((b) => b?.type ?? "unknown").join(", ") || "(空陣列)";
-    throw new Error(`Claude API 回應格式不符預期，content 區塊類型：${blockTypes}`);
+    const stopReason = response?.stop_reason;
+    const raw = JSON.stringify(data).slice(0, 800);
+    throw new Error(
+      `Claude API 回應格式不符預期，content 區塊類型：${blockTypes}` +
+        (stopReason ? `，stop_reason：${stopReason}` : "") +
+        `，原始回應（節錄）：${raw}`
+    );
   }
   return text;
 }
