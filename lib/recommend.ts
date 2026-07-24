@@ -198,7 +198,7 @@ export async function generateRecommendation(
   if (isClaudeConfigured()) {
     try {
       const { system, userMessage } = buildAIPrompt(request, areas.slice(0, 25));
-      const raw = await callClaude({ system, userMessage, maxTokens: 2000 });
+      const raw = await callClaude({ system, userMessage, maxTokens: 4096 });
       const parsed = extractJson<{
         summary: string;
         recommendations: RecommendationItem[];
