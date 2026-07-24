@@ -35,10 +35,18 @@ export interface PropertyRecord {
   source: "gov_open_data" | "sample";
 }
 
+export interface CityDistrict {
+  city: string;
+  district: string;
+}
+
 export interface PropertyFilter {
   dealType?: DealType;
   city?: string;
   district?: string;
+  // 用於地圖畫圈範圍搜尋：符合任一組 city+district 即納入結果，
+  // 可跨越多個縣市。設定此欄位時會取代 city/district 單選欄位。
+  areas?: CityDistrict[];
   buildingType?: string;
   minTotalPrice?: number;
   maxTotalPrice?: number;
@@ -67,6 +75,8 @@ export interface PropertySearchResult {
   page: number;
   pageSize: number;
   dataSource: "gov_open_data" | "sample";
+  // 依目前篩選條件（分頁前）依行政區彙總的統計，供地圖標記使用
+  areaBreakdown: AreaSummary[];
 }
 
 export interface LifestylePreferences {
