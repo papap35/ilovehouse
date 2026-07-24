@@ -89,7 +89,11 @@ export default function PlannerPage() {
               ) : (
                 <div className="space-y-4">
                   {response.recommendations.map((item) => (
-                    <RecommendationCard key={`${item.city}-${item.district}`} item={item} />
+                    <RecommendationCard
+                      key={`${item.city}-${item.district}`}
+                      item={item}
+                      dealType={request.dealType}
+                    />
                   ))}
                 </div>
               )}
