@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "實價登錄查詢與 AI 選屋規劃平台",
+  "engines": {
+    "node": ">=18.18.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
