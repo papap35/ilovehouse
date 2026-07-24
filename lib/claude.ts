@@ -32,7 +32,6 @@ export async function callClaude(params: {
     body: JSON.stringify({
       model,
       max_tokens: params.maxTokens ?? 2000,
-      temperature: 0.4,
       system: params.system,
       messages: [{ role: "user", content: params.userMessage }],
     }),
@@ -40,7 +39,16 @@ export async function callClaude(params: {
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`Claude API 呼叫失敗 (${res.status}): ${detail.slice(0, 300)}`);
+    let flatDetail = detail.slice(0, 300);
+    try {
+      const parsed = JSON.parse(detail);
+      if (parsed?.error?.type || parsed?.error?.message) {
+        flatDetail = `${parsed.error.type ?? "unknown_error"} - ${parsed.error.message ?? ""}`;
+      }
+    } catch {
+      // 回應不是 JSON，維持原始文字片段
+    }
+    throw new Error(`Claude API 呼叫失敗 (${res.status}): ${flatDetail}`);
   }
 
   const data = await res.json();
