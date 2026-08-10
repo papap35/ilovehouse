@@ -79,6 +79,20 @@ export interface PropertySearchResult {
   areaBreakdown: AreaSummary[];
 }
 
+export type DevelopmentPlanType = "都更" | "都市計畫";
+export type DevelopmentPlanStage = "規劃中" | "已核定" | "實施中" | "已完成";
+
+export interface DevelopmentPlan {
+  id: string;
+  city: string;
+  district: string;
+  type: DevelopmentPlanType;
+  stage: DevelopmentPlanStage;
+  name: string;
+  description: string;
+  source: "demo";
+}
+
 export interface LifestylePreferences {
   nearMRT: boolean;
   nearPark: boolean;
@@ -110,6 +124,17 @@ export interface AreaSummary {
   sampleCount: number;
   avgUnitPricePerPing: number;
   avgTotalPrice: number;
+}
+
+export interface HotZoneScore {
+  city: string;
+  district: string;
+  dealType: DealType;
+  score: number; // 0-100，越高代表該區近期房市活動升溫越明顯
+  priceGrowthPct: number;
+  volumeGrowthPct: number;
+  earlierCount: number;
+  recentCount: number;
 }
 
 export interface RecommendationItem {

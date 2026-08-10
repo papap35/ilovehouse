@@ -7,7 +7,18 @@ import PropertyTable from "@/components/PropertyTable";
 import { findDistrictsWithinRadius } from "@/lib/geo";
 import { mergeAreaBreakdownByDistrict } from "@/lib/propertyQuery";
 import { getDistrictCentroid } from "@/lib/districtGeo";
-import type { CityDistrict, PropertyFilter, PropertySearchResult } from "@/lib/types";
+import type {
+  CityDistrict,
+  DevelopmentPlan,
+  HotZoneScore,
+  PropertyFilter,
+  PropertySearchResult,
+} from "@/lib/types";
+import type {
+  ColorMode,
+  DevelopmentPlanMarker,
+  HotZoneScoreMarker,
+} from "@/components/PropertyMap";
 
 const PropertyMap = dynamic(() => import("@/components/PropertyMap"), {
   ssr: false,
@@ -49,6 +60,11 @@ export default function SearchPage() {
   const [circleCenter, setCircleCenter] = useState<[number, number] | null>(null);
   const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM);
 
+  const [showDevelopmentPlans, setShowDevelopmentPlans] = useState(false);
+  const [developmentPlans, setDevelopmentPlans] = useState<DevelopmentPlanMarker[]>([]);
+  const [colorMode, setColorMode] = useState<ColorMode>("price");
+  const [hotZoneScores, setHotZoneScores] = useState<HotZoneScoreMarker[]>([]);
+
   const runSearch = useCallback(async (f: PropertyFilter, p: number) => {
     setLoading(true);
     setError(null);
@@ -67,6 +83,32 @@ export default function SearchPage() {
   useEffect(() => {
     runSearch(appliedFilter, page);
   }, [appliedFilter, page, runSearch]);
+
+  useEffect(() => {
+    if (!showDevelopmentPlans) return;
+    fetch("/api/development-plans")
+      .then((res) => res.json())
+      .then((data: { plans: DevelopmentPlan[] }) => {
+        const withCoords = data.plans
+          .map((p) => {
+            const centroid = getDistrictCentroid(p.city, p.district);
+            return centroid ? { ...p, lat: centroid[0], lng: centroid[1] } : null;
+          })
+          .filter((p): p is NonNullable<typeof p> => p !== null);
+        setDevelopmentPlans(withCoords);
+      })
+      .catch(() => setDevelopmentPlans([]));
+  }, [showDevelopmentPlans]);
+
+  useEffect(() => {
+    // 發展熱度不受目前的買賣/租賃/縣市/行政區篩選條件影響，永遠計算全部資料，
+    // 所以這裡刻意不依賴 appliedFilter，只依 colorMode 切換時抓一次。
+    if (colorMode !== "hotZone") return;
+    fetch("/api/hot-zones")
+      .then((res) => res.json())
+      .then((data: { scores: HotZoneScore[] }) => setHotZoneScores(data.scores ?? []))
+      .catch(() => setHotZoneScores([]));
+  }, [colorMode]);
 
   const handleFormChange = (next: PropertyFilter) => {
     // 手動調整篩選條件時，清掉地圖畫圈範圍搜尋的結果，避免兩種篩選方式互相打架
@@ -146,13 +188,26 @@ export default function SearchPage() {
             依條件篩選買賣／租賃成交行情，快速掌握各行政區的市場價格。
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowMap((v) => !v)}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:border-brand-400 hover:text-brand-700"
-        >
-          {showMap ? "隱藏地圖" : "顯示地圖 🗺️"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setShowMap((v) => !v)}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:border-brand-400 hover:text-brand-700"
+          >
+            {showMap ? "隱藏地圖" : "顯示地圖 🗺️"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowDevelopmentPlans((v) => !v)}
+            className={`rounded-md border px-4 py-2 text-sm font-medium transition ${
+              showDevelopmentPlans
+                ? "border-brand-600 bg-brand-600 text-white"
+                : "border-slate-300 text-slate-600 hover:border-brand-400 hover:text-brand-700"
+            }`}
+          >
+            🏗️ 都市發展計畫標記
+          </button>
+        </div>
       </div>
 
       <FilterForm value={filter} onChange={handleFormChange} onSubmit={handleSubmit} />
@@ -171,6 +226,18 @@ export default function SearchPage() {
             >
               {pickMode ? "點擊地圖設定圓心中…" : "圈選範圍搜尋"}
             </button>
+
+            <label className="flex items-center gap-1.5 text-xs text-slate-500">
+              上色依據
+              <select
+                className="rounded-md border border-slate-300 px-2 py-1"
+                value={colorMode}
+                onChange={(e) => setColorMode(e.target.value as ColorMode)}
+              >
+                <option value="price">均價</option>
+                <option value="hotZone">發展熱度</option>
+              </select>
+            </label>
 
             {circleCenter && (
               <>
@@ -207,10 +274,13 @@ export default function SearchPage() {
             )}
           </div>
           <p className="text-[11px] text-slate-400">
-            點「圈選範圍搜尋」後在地圖上點一下設定圓心，用滑桿調整範圍公里數，範圍內的行政區會一起納入查詢結果（可跨縣市）。地圖上的圓點是各行政區的概略中心位置與均價聚合，不是逐筆物件的精確地址。
+            點「圈選範圍搜尋」後在地圖上點一下設定圓心，用滑桿調整範圍公里數，範圍內的行政區會一起納入查詢結果（可跨縣市）。地圖上的圓點是各行政區的概略中心位置聚合，不是逐筆物件的精確地址；🏗️ 標記為都市發展計畫的<strong>示範資料</strong>，不對應真實案件；「發展熱度」上色不受目前篩選條件影響，反映該區近期成交行情的成長趨勢。
           </p>
           <PropertyMap
             markers={markers}
+            hotZoneScores={hotZoneScores}
+            colorMode={colorMode}
+            developmentPlans={showDevelopmentPlans ? developmentPlans : []}
             highlightedKeys={highlightedKeys}
             circle={circleCenter ? { center: circleCenter, radiusKm } : null}
             pickMode={pickMode}
