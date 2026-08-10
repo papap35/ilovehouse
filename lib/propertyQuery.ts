@@ -197,14 +197,14 @@ export function computeHotZoneScores(
   for (const [key, arr] of groups.entries()) {
     if (arr.length < MIN_RECORDS_FOR_HOT_ZONE) continue;
 
-    const dates = arr.map((r) => new Date(r.transactionDate).getTime());
-    const minDate = Math.min(...dates);
-    const maxDate = Math.max(...dates);
+    const dated = arr.map((r) => ({ record: r, time: new Date(r.transactionDate).getTime() }));
+    const minDate = Math.min(...dated.map((d) => d.time));
+    const maxDate = Math.max(...dated.map((d) => d.time));
     if (minDate === maxDate) continue; // 所有交易同一天，無法分段比較
 
     const midpoint = (minDate + maxDate) / 2;
-    const earlier = arr.filter((r) => new Date(r.transactionDate).getTime() < midpoint);
-    const recent = arr.filter((r) => new Date(r.transactionDate).getTime() >= midpoint);
+    const earlier = dated.filter((d) => d.time < midpoint).map((d) => d.record);
+    const recent = dated.filter((d) => d.time >= midpoint).map((d) => d.record);
     if (earlier.length === 0 || recent.length === 0) continue;
 
     const earlierAvgPrice = averageUnitPrice(earlier);

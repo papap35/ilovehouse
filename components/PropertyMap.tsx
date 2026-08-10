@@ -22,7 +22,7 @@ export interface DistrictMarker {
   avgUnitPricePerPing: number;
 }
 
-export interface HeatScoreMarker {
+export interface HotZoneScoreMarker {
   city: string;
   district: string;
   score: number; // 0-100
@@ -45,11 +45,11 @@ interface SearchCircle {
   radiusKm: number;
 }
 
-export type ColorMode = "price" | "heat";
+export type ColorMode = "price" | "hotZone";
 
 interface Props {
   markers: DistrictMarker[];
-  heatScores?: HeatScoreMarker[];
+  hotZoneScores?: HotZoneScoreMarker[];
   colorMode?: ColorMode;
   developmentPlans?: DevelopmentPlanMarker[];
   highlightedKeys?: Set<string>;
@@ -99,7 +99,7 @@ function colorForPrice(price: number, min: number, max: number): string {
 }
 
 // 用藍→橘→紅（而非均價用的綠→橘→紅），讓兩種上色模式一眼就能分辨
-function colorForHeat(score: number): string {
+function colorForHotZone(score: number): string {
   if (score < 34) return "#2563eb"; // 冷：藍
   if (score < 67) return "#d97706"; // 中等：橘
   return "#dc2626"; // 熱：紅
@@ -107,7 +107,7 @@ function colorForHeat(score: number): string {
 
 export default function PropertyMap({
   markers,
-  heatScores = [],
+  hotZoneScores = [],
   colorMode = "price",
   developmentPlans = [],
   highlightedKeys,
@@ -131,11 +131,11 @@ export default function PropertyMap({
     [markers]
   );
 
-  const heatByDistrict = useMemo(() => {
+  const hotZoneByDistrict = useMemo(() => {
     const map = new Map<string, number>();
-    for (const h of heatScores) map.set(`${h.city}::${h.district}`, h.score);
+    for (const h of hotZoneScores) map.set(`${h.city}::${h.district}`, h.score);
     return map;
-  }, [heatScores]);
+  }, [hotZoneScores]);
 
   return (
     <div
@@ -167,12 +167,12 @@ export default function PropertyMap({
           const key = `${m.city}::${m.district}`;
           const highlighted = !highlightedKeys || highlightedKeys.has(key);
           const radius = 6 + (m.sampleCount / maxCount) * 14;
-          const heatScore = heatByDistrict.get(key);
+          const hotZoneScore = hotZoneByDistrict.get(key);
           const color =
-            colorMode === "heat"
-              ? colorForHeat(heatScore ?? 0)
+            colorMode === "hotZone"
+              ? colorForHotZone(hotZoneScore ?? 0)
               : colorForPrice(m.avgUnitPricePerPing, minPrice, maxPrice);
-          const hasHeatData = colorMode !== "heat" || heatScore !== undefined;
+          const hasHotZoneData = colorMode !== "hotZone" || hotZoneScore !== undefined;
 
           return (
             <CircleMarker
@@ -182,8 +182,8 @@ export default function PropertyMap({
               pathOptions={{
                 color,
                 fillColor: color,
-                fillOpacity: highlighted && hasHeatData ? 0.6 : 0.15,
-                opacity: highlighted && hasHeatData ? 1 : 0.3,
+                fillOpacity: highlighted && hasHotZoneData ? 0.6 : 0.15,
+                opacity: highlighted && hasHotZoneData ? 1 : 0.3,
               }}
               eventHandlers={{
                 click: () => onMarkerClick?.(m),
@@ -196,10 +196,10 @@ export default function PropertyMap({
                   </div>
                   <div>樣本數：{m.sampleCount} 筆</div>
                   <div>平均單價／坪：{formatMoney(m.avgUnitPricePerPing)}</div>
-                  {colorMode === "heat" && (
+                  {colorMode === "hotZone" && (
                     <div>
                       發展熱度：
-                      {heatScore !== undefined ? `${heatScore} 分` : "資料不足，無法計算"}
+                      {hotZoneScore !== undefined ? `${hotZoneScore} 分` : "資料不足，無法計算"}
                     </div>
                   )}
                 </div>
