@@ -2,7 +2,7 @@
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   Circle,
   CircleMarker,
@@ -10,6 +10,7 @@ import {
   Marker,
   Popup,
   TileLayer,
+  useMap,
   useMapEvents,
 } from "react-leaflet";
 
@@ -69,6 +70,23 @@ const DEVELOPMENT_PLAN_ICON = L.divIcon({
   iconSize: [24, 24],
   iconAnchor: [12, 12],
 });
+
+/**
+ * 地圖的視角（center/zoom）原本是固定的，永遠顯示整個台灣，不會依搜尋
+ * 結果調整。這在預設 zoom 下其實連整個台灣都放不下（北緯 22.6°~24.75°，
+ * 台北市/新北市所在的北緯 25° 一帶整個在可視範圍外），篩選到任何比較北邊
+ * 或南邊的縣市時，標記就會飄到看不見的地方，變成「查詢結果沒有顯示在
+ * 地圖上」。改成標記變動時自動 fitBounds 到目前的標記範圍。
+ */
+function FitBoundsToMarkers({ markers }: { markers: DistrictMarker[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (markers.length === 0) return;
+    const bounds = L.latLngBounds(markers.map((m): [number, number] => [m.lat, m.lng]));
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 });
+  }, [markers, map]);
+  return null;
+}
 
 function ClickHandler({
   enabled,
@@ -154,6 +172,7 @@ export default function PropertyMap({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ClickHandler enabled={pickMode} onClick={onMapClick} />
+        <FitBoundsToMarkers markers={markers} />
 
         {circle && (
           <Circle
