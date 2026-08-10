@@ -1,8 +1,17 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
+import L from "leaflet";
 import { useMemo } from "react";
-import { Circle, CircleMarker, MapContainer, Popup, TileLayer, useMapEvents } from "react-leaflet";
+import {
+  Circle,
+  CircleMarker,
+  MapContainer,
+  Marker,
+  Popup,
+  TileLayer,
+  useMapEvents,
+} from "react-leaflet";
 
 export interface DistrictMarker {
   city: string;
@@ -13,13 +22,36 @@ export interface DistrictMarker {
   avgUnitPricePerPing: number;
 }
 
+export interface HeatScoreMarker {
+  city: string;
+  district: string;
+  score: number; // 0-100
+}
+
+export interface DevelopmentPlanMarker {
+  id: string;
+  city: string;
+  district: string;
+  lat: number;
+  lng: number;
+  type: string;
+  stage: string;
+  name: string;
+  description: string;
+}
+
 interface SearchCircle {
   center: [number, number];
   radiusKm: number;
 }
 
+export type ColorMode = "price" | "heat";
+
 interface Props {
   markers: DistrictMarker[];
+  heatScores?: HeatScoreMarker[];
+  colorMode?: ColorMode;
+  developmentPlans?: DevelopmentPlanMarker[];
   highlightedKeys?: Set<string>;
   circle?: SearchCircle | null;
   pickMode?: boolean;
@@ -30,6 +62,13 @@ interface Props {
 }
 
 const TAIWAN_CENTER: [number, number] = [23.7, 120.96];
+
+const DEVELOPMENT_PLAN_ICON = L.divIcon({
+  html: '<div style="font-size: 18px; line-height: 1;">🏗️</div>',
+  className: "development-plan-marker",
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+});
 
 function ClickHandler({
   enabled,
@@ -59,8 +98,18 @@ function colorForPrice(price: number, min: number, max: number): string {
   return "#dc2626"; // 昂貴：紅
 }
 
+// 用藍→橘→紅（而非均價用的綠→橘→紅），讓兩種上色模式一眼就能分辨
+function colorForHeat(score: number): string {
+  if (score < 34) return "#2563eb"; // 冷：藍
+  if (score < 67) return "#d97706"; // 中等：橘
+  return "#dc2626"; // 熱：紅
+}
+
 export default function PropertyMap({
   markers,
+  heatScores = [],
+  colorMode = "price",
+  developmentPlans = [],
   highlightedKeys,
   circle,
   pickMode = false,
@@ -81,6 +130,12 @@ export default function PropertyMap({
     () => Math.max(1, ...markers.map((m) => m.sampleCount)),
     [markers]
   );
+
+  const heatByDistrict = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const h of heatScores) map.set(`${h.city}::${h.district}`, h.score);
+    return map;
+  }, [heatScores]);
 
   return (
     <div
@@ -112,16 +167,23 @@ export default function PropertyMap({
           const key = `${m.city}::${m.district}`;
           const highlighted = !highlightedKeys || highlightedKeys.has(key);
           const radius = 6 + (m.sampleCount / maxCount) * 14;
+          const heatScore = heatByDistrict.get(key);
+          const color =
+            colorMode === "heat"
+              ? colorForHeat(heatScore ?? 0)
+              : colorForPrice(m.avgUnitPricePerPing, minPrice, maxPrice);
+          const hasHeatData = colorMode !== "heat" || heatScore !== undefined;
+
           return (
             <CircleMarker
               key={key}
               center={[m.lat, m.lng]}
               radius={radius}
               pathOptions={{
-                color: colorForPrice(m.avgUnitPricePerPing, minPrice, maxPrice),
-                fillColor: colorForPrice(m.avgUnitPricePerPing, minPrice, maxPrice),
-                fillOpacity: highlighted ? 0.6 : 0.15,
-                opacity: highlighted ? 1 : 0.3,
+                color,
+                fillColor: color,
+                fillOpacity: highlighted && hasHeatData ? 0.6 : 0.15,
+                opacity: highlighted && hasHeatData ? 1 : 0.3,
               }}
               eventHandlers={{
                 click: () => onMarkerClick?.(m),
@@ -134,11 +196,32 @@ export default function PropertyMap({
                   </div>
                   <div>樣本數：{m.sampleCount} 筆</div>
                   <div>平均單價／坪：{formatMoney(m.avgUnitPricePerPing)}</div>
+                  {colorMode === "heat" && (
+                    <div>
+                      發展熱度：
+                      {heatScore !== undefined ? `${heatScore} 分` : "資料不足，無法計算"}
+                    </div>
+                  )}
                 </div>
               </Popup>
             </CircleMarker>
           );
         })}
+
+        {developmentPlans.map((p) => (
+          <Marker key={p.id} position={[p.lat, p.lng]} icon={DEVELOPMENT_PLAN_ICON}>
+            <Popup>
+              <div className="text-sm">
+                <div className="font-bold">{p.name}</div>
+                <div className="text-xs text-amber-600">示範資料，非官方即時資訊</div>
+                <div className="mt-1">
+                  {p.city} {p.district} ・ {p.type} ・ {p.stage}
+                </div>
+                <div className="mt-1 text-slate-500">{p.description}</div>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
       </MapContainer>
     </div>
   );
