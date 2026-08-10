@@ -5,13 +5,14 @@ export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
   const address = params.get("address");
   const city = params.get("city");
+  const district = params.get("district");
 
-  if (!address || !city) {
-    return NextResponse.json({ error: "缺少 address 或 city" }, { status: 400 });
+  if (!address || !city || !district) {
+    return NextResponse.json({ error: "缺少 address、city 或 district" }, { status: 400 });
   }
 
   try {
-    const result = await geocodeOneAddress(address, city);
+    const result = await geocodeOneAddress(address, city, district);
     return NextResponse.json({ result });
   } catch (err) {
     return NextResponse.json(
