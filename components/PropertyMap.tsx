@@ -13,6 +13,7 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet";
+import type { IndividualMarker } from "@/lib/geocode";
 
 export interface DistrictMarker {
   city: string;
@@ -41,6 +42,11 @@ export interface DevelopmentPlanMarker {
   description: string;
 }
 
+// 跟 lib/geocode.ts 的 buildIndividualMarkers() 回傳型別共用同一個定義，
+// 避免兩邊各自維護一份長得一樣、卻可能悄悄長歪（例如 dealType 沒有共用
+// DealType）的型別。
+export type IndividualPropertyMarker = IndividualMarker;
+
 interface SearchCircle {
   center: [number, number];
   radiusKm: number;
@@ -50,6 +56,7 @@ export type ColorMode = "price" | "hotZone";
 
 interface Props {
   markers: DistrictMarker[];
+  individualMarkers?: IndividualPropertyMarker[];
   hotZoneScores?: HotZoneScoreMarker[];
   colorMode?: ColorMode;
   developmentPlans?: DevelopmentPlanMarker[];
@@ -78,15 +85,37 @@ const DEVELOPMENT_PLAN_ICON = L.divIcon({
  * 或南邊的縣市時，標記就會飄到看不見的地方，變成「查詢結果沒有顯示在
  * 地圖上」。改成標記變動時自動 fitBounds 到目前的標記範圍。
  */
-function FitBoundsToMarkers({ markers }: { markers: DistrictMarker[] }) {
+function FitBoundsToMarkers({ points }: { points: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
-    if (markers.length === 0) return;
-    const bounds = L.latLngBounds(markers.map((m): [number, number] => [m.lat, m.lng]));
+    if (points.length === 0) return;
+    const bounds = L.latLngBounds(points);
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 });
-  }, [markers, map]);
+  }, [points, map]);
   return null;
 }
+
+const DEAL_TYPE_COLOR: Record<"buy" | "rent", string> = {
+  buy: "#2563eb", // 買賣：藍
+  rent: "#9333ea", // 租賃：紫
+};
+
+// 跟都市發展計畫標記一樣用 L.divIcon（純 HTML/CSS），不用需要外部圖片
+// 資源的預設 Marker 圖示
+const INDIVIDUAL_PROPERTY_ICONS: Record<"buy" | "rent", L.DivIcon> = {
+  buy: L.divIcon({
+    html: `<div style="width:14px;height:14px;border-radius:50%;background:${DEAL_TYPE_COLOR.buy};border:2px solid white;box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>`,
+    className: "individual-property-marker",
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  }),
+  rent: L.divIcon({
+    html: `<div style="width:14px;height:14px;border-radius:50%;background:${DEAL_TYPE_COLOR.rent};border:2px solid white;box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>`,
+    className: "individual-property-marker",
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  }),
+};
 
 function ClickHandler({
   enabled,
@@ -125,6 +154,7 @@ function colorForHotZone(score: number): string {
 
 export default function PropertyMap({
   markers,
+  individualMarkers = [],
   hotZoneScores = [],
   colorMode = "price",
   developmentPlans = [],
@@ -155,6 +185,13 @@ export default function PropertyMap({
     return map;
   }, [hotZoneScores]);
 
+  const boundsPoints = useMemo((): [number, number][] => {
+    if (individualMarkers.length > 0) {
+      return individualMarkers.map((m): [number, number] => [m.lat, m.lng]);
+    }
+    return markers.map((m): [number, number] => [m.lat, m.lng]);
+  }, [markers, individualMarkers]);
+
   return (
     <div
       className={`overflow-hidden rounded-xl border border-slate-200 ${
@@ -172,7 +209,7 @@ export default function PropertyMap({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ClickHandler enabled={pickMode} onClick={onMapClick} />
-        <FitBoundsToMarkers markers={markers} />
+        <FitBoundsToMarkers points={boundsPoints} />
 
         {circle && (
           <Circle
@@ -226,6 +263,23 @@ export default function PropertyMap({
             </CircleMarker>
           );
         })}
+
+        {individualMarkers.map((m) => (
+          <Marker key={m.id} position={[m.lat, m.lng]} icon={INDIVIDUAL_PROPERTY_ICONS[m.dealType]}>
+            <Popup>
+              <div className="text-sm">
+                <div className="font-bold">{m.address}</div>
+                <div className="text-slate-500">
+                  {m.city} {m.district}
+                </div>
+                <div className="mt-1">
+                  {m.dealType === "buy" ? "買賣" : "租賃"} ・ {m.areaPing} 坪
+                </div>
+                <div>{formatMoney(m.totalPrice)}{m.dealType === "rent" ? " /月" : ""}（{formatMoney(m.unitPricePerPing)}/坪）</div>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
 
         {developmentPlans.map((p) => (
           <Marker key={p.id} position={[p.lat, p.lng]} icon={DEVELOPMENT_PLAN_ICON}>
