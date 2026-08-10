@@ -7,18 +7,24 @@ import PropertyTable from "@/components/PropertyTable";
 import { findDistrictsWithinRadius } from "@/lib/geo";
 import { mergeAreaBreakdownByDistrict } from "@/lib/propertyQuery";
 import { getDistrictCentroid } from "@/lib/districtGeo";
+import { buildIndividualMarkers } from "@/lib/geocode";
+import type { GeocodeResult } from "@/lib/geocode";
 import type {
   CityDistrict,
   DevelopmentPlan,
   HotZoneScore,
   PropertyFilter,
+  PropertyRecord,
   PropertySearchResult,
 } from "@/lib/types";
 import type {
   ColorMode,
   DevelopmentPlanMarker,
   HotZoneScoreMarker,
+  IndividualPropertyMarker,
 } from "@/components/PropertyMap";
+
+type MapViewMode = "aggregate" | "individual";
 
 const PropertyMap = dynamic(() => import("@/components/PropertyMap"), {
   ssr: false,
@@ -65,6 +71,14 @@ export default function SearchPage() {
   const [colorMode, setColorMode] = useState<ColorMode>("price");
   const [hotZoneScores, setHotZoneScores] = useState<HotZoneScoreMarker[]>([]);
 
+  const [mapViewMode, setMapViewMode] = useState<MapViewMode>("aggregate");
+  const [individualMarkers, setIndividualMarkers] = useState<IndividualPropertyMarker[]>([]);
+  const [unresolvedCount, setUnresolvedCount] = useState(0);
+  const [geocoding, setGeocoding] = useState(false);
+  const [geocodingProgress, setGeocodingProgress] = useState<{ done: number; total: number } | null>(
+    null
+  );
+
   const runSearch = useCallback(async (f: PropertyFilter, p: number) => {
     setLoading(true);
     setError(null);
@@ -109,6 +123,42 @@ export default function SearchPage() {
       .then((data: { scores: HotZoneScore[] }) => setHotZoneScores(data.scores ?? []))
       .catch(() => setHotZoneScores([]));
   }, [colorMode]);
+
+  const runGeocoding = useCallback(async (items: PropertyRecord[]) => {
+    if (items.length === 0) {
+      setIndividualMarkers([]);
+      setUnresolvedCount(0);
+      return;
+    }
+    setGeocoding(true);
+    setGeocodingProgress({ done: 0, total: items.length });
+
+    const results = new Map<string, GeocodeResult | null>();
+    for (let i = 0; i < items.length; i++) {
+      const params = new URLSearchParams({ address: items[i].address, city: items[i].city });
+      try {
+        const res = await fetch(`/api/geocode?${params.toString()}`);
+        const data: { result: GeocodeResult | null } = await res.json();
+        results.set(items[i].address, data.result ?? null);
+      } catch {
+        results.set(items[i].address, null);
+      }
+      setGeocodingProgress({ done: i + 1, total: items.length });
+    }
+
+    const built = buildIndividualMarkers(items, results);
+    setIndividualMarkers(built.markers);
+    setUnresolvedCount(built.unresolvedCount);
+    setGeocoding(false);
+  }, []);
+
+  useEffect(() => {
+    // 個別物件檢視已開啟時，翻頁/重新查詢會換一批新的 result.items，
+    // 自動幫新的一頁定位，不用使用者每次都手動再按一次。
+    if (mapViewMode !== "individual" || !result || result.dataSource === "sample") return;
+    runGeocoding(result.items);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapViewMode, result]);
 
   const handleFormChange = (next: PropertyFilter) => {
     // 手動調整篩選條件時，清掉地圖畫圈範圍搜尋的結果，避免兩種篩選方式互相打架
@@ -227,17 +277,62 @@ export default function SearchPage() {
               {pickMode ? "點擊地圖設定圓心中…" : "圈選範圍搜尋"}
             </button>
 
-            <label className="flex items-center gap-1.5 text-xs text-slate-500">
-              上色依據
-              <select
-                className="rounded-md border border-slate-300 px-2 py-1"
-                value={colorMode}
-                onChange={(e) => setColorMode(e.target.value as ColorMode)}
+            <div className="flex items-center gap-1 rounded-md border border-slate-300 p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setMapViewMode("aggregate")}
+                className={`rounded px-2.5 py-1 font-semibold transition ${
+                  mapViewMode === "aggregate"
+                    ? "bg-brand-600 text-white"
+                    : "text-slate-600 hover:bg-brand-50"
+                }`}
               >
-                <option value="price">均價</option>
-                <option value="hotZone">發展熱度</option>
-              </select>
-            </label>
+                聚合檢視
+              </button>
+              <button
+                type="button"
+                onClick={() => setMapViewMode("individual")}
+                disabled={!result || result.items.length === 0 || result.dataSource === "sample"}
+                title={
+                  result?.dataSource === "sample"
+                    ? "示範資料的地址是虛構的，無法定位個別地址"
+                    : undefined
+                }
+                className={`rounded px-2.5 py-1 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                  mapViewMode === "individual"
+                    ? "bg-brand-600 text-white"
+                    : "text-slate-600 hover:bg-brand-50"
+                }`}
+              >
+                個別物件檢視
+              </button>
+            </div>
+
+            {mapViewMode === "aggregate" && (
+              <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                上色依據
+                <select
+                  className="rounded-md border border-slate-300 px-2 py-1"
+                  value={colorMode}
+                  onChange={(e) => setColorMode(e.target.value as ColorMode)}
+                >
+                  <option value="price">均價</option>
+                  <option value="hotZone">發展熱度</option>
+                </select>
+              </label>
+            )}
+
+            {mapViewMode === "individual" && geocoding && geocodingProgress && (
+              <span className="text-xs text-slate-500">
+                正在定位地址 {geocodingProgress.done}/{geocodingProgress.total}…
+              </span>
+            )}
+
+            {mapViewMode === "individual" && !geocoding && unresolvedCount > 0 && (
+              <span className="text-xs text-amber-600">
+                {unresolvedCount} 筆因地址無法定位而未顯示
+              </span>
+            )}
 
             {circleCenter && (
               <>
@@ -274,10 +369,13 @@ export default function SearchPage() {
             )}
           </div>
           <p className="text-[11px] text-slate-400">
-            點「圈選範圍搜尋」後在地圖上點一下設定圓心，用滑桿調整範圍公里數，範圍內的行政區會一起納入查詢結果（可跨縣市）。地圖上的圓點是各行政區的概略中心位置聚合，不是逐筆物件的精確地址；🏗️ 標記為都市發展計畫的<strong>示範資料</strong>，不對應真實案件；「發展熱度」上色不受目前篩選條件影響，反映該區近期成交行情的成長趨勢。
+            「聚合檢視」的圓點是各行政區的概略中心位置聚合，不是逐筆物件的精確地址；「個別物件檢視」會用
+            Nominatim（OpenStreetMap 免費地理編碼服務）幫目前頁面（最多 20 筆）的地址定位，受頻率限制影響需要一點時間，示範資料的地址是虛構的無法使用。點「圈選範圍搜尋」後在地圖上點一下設定圓心，用滑桿調整範圍公里數，範圍內的行政區會一起納入查詢結果（可跨縣市）。🏗️
+            標記為都市發展計畫的<strong>示範資料</strong>，不對應真實案件；「發展熱度」上色不受目前篩選條件影響，反映該區近期成交行情的成長趨勢。
           </p>
           <PropertyMap
-            markers={markers}
+            markers={mapViewMode === "aggregate" ? markers : []}
+            individualMarkers={mapViewMode === "individual" ? individualMarkers : []}
             hotZoneScores={hotZoneScores}
             colorMode={colorMode}
             developmentPlans={showDevelopmentPlans ? developmentPlans : []}

@@ -41,6 +41,19 @@ export interface DevelopmentPlanMarker {
   description: string;
 }
 
+export interface IndividualPropertyMarker {
+  id: string;
+  lat: number;
+  lng: number;
+  dealType: "buy" | "rent";
+  address: string;
+  city: string;
+  district: string;
+  totalPrice: number;
+  areaPing: number;
+  unitPricePerPing: number;
+}
+
 interface SearchCircle {
   center: [number, number];
   radiusKm: number;
@@ -50,6 +63,7 @@ export type ColorMode = "price" | "hotZone";
 
 interface Props {
   markers: DistrictMarker[];
+  individualMarkers?: IndividualPropertyMarker[];
   hotZoneScores?: HotZoneScoreMarker[];
   colorMode?: ColorMode;
   developmentPlans?: DevelopmentPlanMarker[];
@@ -78,15 +92,20 @@ const DEVELOPMENT_PLAN_ICON = L.divIcon({
  * 或南邊的縣市時，標記就會飄到看不見的地方，變成「查詢結果沒有顯示在
  * 地圖上」。改成標記變動時自動 fitBounds 到目前的標記範圍。
  */
-function FitBoundsToMarkers({ markers }: { markers: DistrictMarker[] }) {
+function FitBoundsToMarkers({ points }: { points: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
-    if (markers.length === 0) return;
-    const bounds = L.latLngBounds(markers.map((m): [number, number] => [m.lat, m.lng]));
+    if (points.length === 0) return;
+    const bounds = L.latLngBounds(points);
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 });
-  }, [markers, map]);
+  }, [points, map]);
   return null;
 }
+
+const DEAL_TYPE_COLOR: Record<"buy" | "rent", string> = {
+  buy: "#2563eb", // 買賣：藍
+  rent: "#9333ea", // 租賃：紫
+};
 
 function ClickHandler({
   enabled,
@@ -125,6 +144,7 @@ function colorForHotZone(score: number): string {
 
 export default function PropertyMap({
   markers,
+  individualMarkers = [],
   hotZoneScores = [],
   colorMode = "price",
   developmentPlans = [],
@@ -155,6 +175,13 @@ export default function PropertyMap({
     return map;
   }, [hotZoneScores]);
 
+  const boundsPoints = useMemo((): [number, number][] => {
+    if (individualMarkers.length > 0) {
+      return individualMarkers.map((m): [number, number] => [m.lat, m.lng]);
+    }
+    return markers.map((m): [number, number] => [m.lat, m.lng]);
+  }, [markers, individualMarkers]);
+
   return (
     <div
       className={`overflow-hidden rounded-xl border border-slate-200 ${
@@ -172,7 +199,7 @@ export default function PropertyMap({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ClickHandler enabled={pickMode} onClick={onMapClick} />
-        <FitBoundsToMarkers markers={markers} />
+        <FitBoundsToMarkers points={boundsPoints} />
 
         {circle && (
           <Circle
@@ -226,6 +253,33 @@ export default function PropertyMap({
             </CircleMarker>
           );
         })}
+
+        {individualMarkers.map((m) => (
+          <CircleMarker
+            key={m.id}
+            center={[m.lat, m.lng]}
+            radius={8}
+            pathOptions={{
+              color: DEAL_TYPE_COLOR[m.dealType],
+              fillColor: DEAL_TYPE_COLOR[m.dealType],
+              fillOpacity: 0.8,
+              opacity: 1,
+            }}
+          >
+            <Popup>
+              <div className="text-sm">
+                <div className="font-bold">{m.address}</div>
+                <div className="text-slate-500">
+                  {m.city} {m.district}
+                </div>
+                <div className="mt-1">
+                  {m.dealType === "buy" ? "買賣" : "租賃"} ・ {m.areaPing} 坪
+                </div>
+                <div>{formatMoney(m.totalPrice)}{m.dealType === "rent" ? " /月" : ""}（{formatMoney(m.unitPricePerPing)}/坪）</div>
+              </div>
+            </Popup>
+          </CircleMarker>
+        ))}
 
         {developmentPlans.map((p) => (
           <Marker key={p.id} position={[p.lat, p.lng]} icon={DEVELOPMENT_PLAN_ICON}>
