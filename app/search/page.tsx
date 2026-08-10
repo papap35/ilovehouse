@@ -155,7 +155,14 @@ export default function SearchPage() {
   useEffect(() => {
     // 個別物件檢視已開啟時，翻頁/重新查詢會換一批新的 result.items，
     // 自動幫新的一頁定位，不用使用者每次都手動再按一次。
-    if (mapViewMode !== "individual" || !result || result.dataSource === "sample") return;
+    if (mapViewMode !== "individual" || !result) return;
+    if (result.dataSource === "sample") {
+      // 新的查詢結果變成示範資料：清掉上一次查詢殘留的個別物件標記，
+      // 避免畫面留著跟目前結果對不上的舊 pin 誤導使用者。
+      setIndividualMarkers([]);
+      setUnresolvedCount(0);
+      return;
+    }
     runGeocoding(result.items);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapViewMode, result]);

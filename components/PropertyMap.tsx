@@ -13,6 +13,7 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet";
+import type { IndividualMarker } from "@/lib/geocode";
 
 export interface DistrictMarker {
   city: string;
@@ -41,18 +42,10 @@ export interface DevelopmentPlanMarker {
   description: string;
 }
 
-export interface IndividualPropertyMarker {
-  id: string;
-  lat: number;
-  lng: number;
-  dealType: "buy" | "rent";
-  address: string;
-  city: string;
-  district: string;
-  totalPrice: number;
-  areaPing: number;
-  unitPricePerPing: number;
-}
+// 跟 lib/geocode.ts 的 buildIndividualMarkers() 回傳型別共用同一個定義，
+// 避免兩邊各自維護一份長得一樣、卻可能悄悄長歪（例如 dealType 沒有共用
+// DealType）的型別。
+export type IndividualPropertyMarker = IndividualMarker;
 
 interface SearchCircle {
   center: [number, number];
@@ -105,6 +98,23 @@ function FitBoundsToMarkers({ points }: { points: [number, number][] }) {
 const DEAL_TYPE_COLOR: Record<"buy" | "rent", string> = {
   buy: "#2563eb", // 買賣：藍
   rent: "#9333ea", // 租賃：紫
+};
+
+// 跟都市發展計畫標記一樣用 L.divIcon（純 HTML/CSS），不用需要外部圖片
+// 資源的預設 Marker 圖示
+const INDIVIDUAL_PROPERTY_ICONS: Record<"buy" | "rent", L.DivIcon> = {
+  buy: L.divIcon({
+    html: `<div style="width:14px;height:14px;border-radius:50%;background:${DEAL_TYPE_COLOR.buy};border:2px solid white;box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>`,
+    className: "individual-property-marker",
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  }),
+  rent: L.divIcon({
+    html: `<div style="width:14px;height:14px;border-radius:50%;background:${DEAL_TYPE_COLOR.rent};border:2px solid white;box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>`,
+    className: "individual-property-marker",
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  }),
 };
 
 function ClickHandler({
@@ -255,17 +265,7 @@ export default function PropertyMap({
         })}
 
         {individualMarkers.map((m) => (
-          <CircleMarker
-            key={m.id}
-            center={[m.lat, m.lng]}
-            radius={8}
-            pathOptions={{
-              color: DEAL_TYPE_COLOR[m.dealType],
-              fillColor: DEAL_TYPE_COLOR[m.dealType],
-              fillOpacity: 0.8,
-              opacity: 1,
-            }}
-          >
+          <Marker key={m.id} position={[m.lat, m.lng]} icon={INDIVIDUAL_PROPERTY_ICONS[m.dealType]}>
             <Popup>
               <div className="text-sm">
                 <div className="font-bold">{m.address}</div>
@@ -278,7 +278,7 @@ export default function PropertyMap({
                 <div>{formatMoney(m.totalPrice)}{m.dealType === "rent" ? " /月" : ""}（{formatMoney(m.unitPricePerPing)}/坪）</div>
               </div>
             </Popup>
-          </CircleMarker>
+          </Marker>
         ))}
 
         {developmentPlans.map((p) => (
