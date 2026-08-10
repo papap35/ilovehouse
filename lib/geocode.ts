@@ -100,8 +100,16 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchFromNominatim(address: string, city: string): Promise<GeocodeResult | null> {
-  const query = `台灣 ${city}${address}`;
+async function fetchFromNominatim(
+  address: string,
+  city: string,
+  district: string
+): Promise<GeocodeResult | null> {
+  // 政府開放資料的 address（土地位置建物門牌）欄位本身不含行政區名稱，
+  // district 是分開的欄位；查詢字串一定要把 district 補回去，不然像
+  // 「文化路二段155巷12號」這種街名在很多行政區都可能重複出現，
+  // Nominatim 常常會直接查不到。
+  const query = `台灣 ${city}${district}${address}`;
   const url = `${NOMINATIM_URL}?format=json&limit=1&countrycodes=tw&q=${encodeURIComponent(query)}`;
 
   try {
@@ -127,7 +135,8 @@ async function fetchFromNominatim(address: string, city: string): Promise<Geocod
  */
 export async function geocodeOneAddress(
   address: string,
-  city: string
+  city: string,
+  district: string
 ): Promise<GeocodeResult | null> {
   const cached = readGeocodeCache(geocodeCache, address);
   if (cached !== undefined) return cached;
@@ -136,7 +145,7 @@ export async function geocodeOneAddress(
   if (wait > 0) await sleep(wait);
   nextAllowedRequestAt = Date.now() + RATE_LIMIT_MS;
 
-  const result = await fetchFromNominatim(address, city);
+  const result = await fetchFromNominatim(address, city, district);
   writeGeocodeCache(geocodeCache, address, result);
   return result;
 }

@@ -135,7 +135,11 @@ export default function SearchPage() {
 
     const results = new Map<string, GeocodeResult | null>();
     for (let i = 0; i < items.length; i++) {
-      const params = new URLSearchParams({ address: items[i].address, city: items[i].city });
+      const params = new URLSearchParams({
+        address: items[i].address,
+        city: items[i].city,
+        district: items[i].district,
+      });
       try {
         const res = await fetch(`/api/geocode?${params.toString()}`);
         const data: { result: GeocodeResult | null } = await res.json();
