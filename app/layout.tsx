@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
+import { Noto_Serif_TC } from "next/font/google";
 import Nav from "@/components/Nav";
 import "./globals.css";
+
+const notoSerifTC = Noto_Serif_TC({
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+  variable: "--font-brand-serif",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "好宅選 iLoveHouse ｜ 實價登錄查詢與 AI 選屋規劃",
@@ -14,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-Hant">
+    <html lang="zh-Hant" className={notoSerifTC.variable}>
       <body>
         <Nav />
         <main className="mx-auto min-h-[calc(100vh-64px)] max-w-6xl px-4 py-8">
