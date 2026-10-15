@@ -21,6 +21,9 @@ const config: Config = {
           900: "#173c31",
         },
       },
+      fontFamily: {
+        brand: ["var(--font-brand-serif)", "serif"],
+      },
     },
   },
   plugins: [],
